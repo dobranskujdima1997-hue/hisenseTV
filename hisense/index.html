@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лагуна</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="wpA" class="wp"></div>
+<div id="wpB" class="wp"></div>
+<div class="scrim"></div>
+
+<div id="stage">
+  <div class="top">
+    <div class="timebox">
+      <div id="clock" class="clock">--:--</div>
+      <div id="date" class="date">&nbsp;</div>
+    </div>
+
+    <div id="weather" class="weather is-empty">
+      <div class="w-main">
+        <span id="wIcon" class="w-icon"></span>
+        <span id="wTemp" class="w-temp"></span>
+      </div>
+      <div id="wDesc" class="w-desc"></div>
+      <div id="wMeta" class="w-meta"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div id="dock" class="dock"></div>
+    <div class="hint">
+      <span class="dot dot-red"></span>оновити
+      <span class="dot dot-green"></span>наступний фон
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
