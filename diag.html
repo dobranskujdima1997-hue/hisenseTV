@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIDAA diag</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0d12; color: #e8ecf3; font-family: Arial, Helvetica, sans-serif; }
+  body { padding: 1.5vw 2vw; font-size: 1.45vw; line-height: 1.3; }
+  h1 { font-size: 2.2vw; margin: 0 0 1vw 0; color: #ffd166; }
+  h2 { font-size: 1.5vw; margin: 1vw 0 0.4vw 0; color: #7cc4ff; text-transform: uppercase; }
+  .col { float: left; width: 48%; margin-right: 2%; }
+  .row { margin: 0.2vw 0; word-wrap: break-word; }
+  .k { color: #9aa4b5; }
+  .v { color: #ffffff; font-weight: bold; }
+  .yes { color: #5be37d; font-weight: bold; }
+  .no { color: #ff6b6b; font-weight: bold; }
+  #ua { font-size: 1.15vw; color: #fff; word-wrap: break-word; }
+  #lastkey { font-size: 4vw; font-weight: bold; color: #ffd166; margin: 0.3vw 0; }
+  #keylog, #prevlog { font-family: "Courier New", monospace; font-size: 1.3vw; }
+  #hint { color: #9aa4b5; font-size: 1.1vw; }
+  #err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<h1>VIDAA діагностика <span id="ver" class="k">v1</span></h1>
+
+<div class="col">
+  <h2>Браузер</h2>
+  <div class="row"><span class="k">Chromium: </span><span class="v" id="chromium">?</span></div>
+  <div id="ua">?</div>
+
+  <h2>Екран</h2>
+  <div id="screen"></div>
+
+  <h2>Hisense / VIDAA API</h2>
+  <div id="api"></div>
+  <div class="row"><span class="k">Усі знайдені: </span><span id="apilist" class="v">—</span></div>
+
+  <h2>Підтримка</h2>
+  <div id="feat"></div>
+</div>
+
+<div class="col">
+  <h2>Кнопки пульта — натискай по черзі</h2>
+  <div id="lastkey">чекаю натискання…</div>
+  <div id="hint">Back заблоковано, щоб побачити код. Вийти: натисни одну й ту саму кнопку 3 рази швидко, або Home/Exit.</div>
+  <div id="keylog"></div>
+
+  <h2>Попередній сеанс (якщо сторінка закрилась)</h2>
+  <div id="prevlog">—</div>
+  <div id="err"></div>
+</div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  function row(k, v, cls) {
+    return '<div class="row"><span class="k">' + esc(k) + ': </span><span class="' + (cls || 'v') + '">' + esc(v) + '</span></div>';
+  }
+  function yn(k, ok, extra) {
+    return row(k, (ok ? 'ТАК' : 'НІ') + (extra ? ' ' + extra : ''), ok ? 'yes' : 'no');
+  }
+  window.onerror = function (m, src, line) {
+    $('err').innerHTML += esc('JS error: ' + m + ' @' + line) + '<br>';
+  };
+
+  /* ---- browser ---- */
+  var ua = navigator.userAgent || '';
+  $('ua').innerHTML = esc(ua);
+  var m = ua.match(/(?:Chrome|Chromium)\/([\d.]+)/);
+  $('chromium').innerHTML = esc(m ? m[1] : 'не знайдено в UA');
+
+  /* ---- screen ---- */
+  function drawScreen() {
+    var h = '';
+    h += row('viewport (inner)', window.innerWidth + ' x ' + window.innerHeight);
+    h += row('screen', screen.width + ' x ' + screen.height);
+    h += row('devicePixelRatio', window.devicePixelRatio);
+    h += row('documentElement.client', document.documentElement.clientWidth + ' x ' + document.documentElement.clientHeight);
+    $('screen').innerHTML = h;
+  }
+  drawScreen();
+  window.onresize = drawScreen;
+
+  /* ---- Hisense API ---- */
+  function drawApi() {
+    var known = ['Hisense_installApp', 'Hisense_uninstallApp', 'Hisense_Exit', 'Hisense_GetDeviceID',
+                 'Hisense_GetFirmWareVersion', 'Hisense_GetModelName', 'Hisense_GetApiVersion'];
+    var h = '', i;
+    for (i = 0; i < known.length; i++) {
+      var t = 'undefined';
+      try { t = typeof window[known[i]]; } catch (e) { t = 'error'; }
+      h += yn(known[i], t !== 'undefined', '(' + t + ')');
+    }
+    $('api').innerHTML = h;
+
+    var found = {}, names = [], re = /hisense|vidaa|vowos|omi_|jhk/i, k;
+    try { for (k in window) { if (re.test(k)) { found[k] = 1; } } } catch (e1) {}
+    try {
+      var own = Object.getOwnPropertyNames(window);
+      for (i = 0; i < own.length; i++) { if (re.test(own[i])) { found[own[i]] = 1; } }
+    } catch (e2) {}
+    for (k in found) { names.push(k); }
+    names.sort();
+    $('apilist').innerHTML = names.length ? esc(names.length + ' шт: ' + names.join(', ')) : 'нічого не знайдено';
+
+    /* safe read-only getters, if present */
+    var getters = ['Hisense_GetFirmWareVersion', 'Hisense_GetModelName', 'Hisense_GetApiVersion', 'Hisense_GetBrand'];
+    var extra = '';
+    for (i = 0; i < getters.length; i++) {
+      if (typeof window[getters[i]] === 'function') {
+        try { extra += row(getters[i] + '()', window[getters[i]]()); } catch (e3) { extra += row(getters[i] + '()', 'помилка: ' + e3.message, 'no'); }
+      }
+    }
+    $('api').innerHTML += extra;
+  }
+  drawApi();
+  /* API may be injected late */
+  setTimeout(drawApi, 2000);
+  setTimeout(drawApi, 6000);
+
+  /* ---- features ---- */
+  function cssOk(p, v) {
+    try { return !!(window.CSS && CSS.supports && CSS.supports(p, v)); } catch (e) { return false; }
+  }
+  function syntaxOk(code) {
+    try { new Function(code); return true; } catch (e) { return false; }
+  }
+  var f = '';
+  f += yn('ES2015 (let, =>)', syntaxOk('let a = () => 1;'));
+  f += yn('async/await (ES2017)', syntaxOk('async function a(){ await 1; }'));
+  f += yn('?. та ?? (ES2020)', syntaxOk('var a = null; a?.b ?? 1;'));
+  f += yn('fetch', typeof window.fetch === 'function');
+  f += yn('localStorage', (function () { try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); return true; } catch (e) { return false; } })());
+  f += yn('CSS grid', cssOk('display', 'grid'));
+  f += yn('CSS variables', cssOk('--a', '0'));
+  f += yn('flex gap', (function () {
+    try {
+      var d = document.createElement('div');
+      d.style.cssText = 'display:flex;flex-direction:column;row-gap:1px;position:absolute;visibility:hidden';
+      d.appendChild(document.createElement('div')); d.appendChild(document.createElement('div'));
+      document.body.appendChild(d);
+      var ok = d.scrollHeight === 1; document.body.removeChild(d); return ok;
+    } catch (e) { return false; }
+  })());
+  f += yn('backdrop-filter', cssOk('backdrop-filter', 'blur(2px)') || cssOk('-webkit-backdrop-filter', 'blur(2px)'));
+  f += yn('Дата укр. (Intl)', (function () {
+    try { return /[а-яіїє]/i.test(new Date(2024, 0, 15).toLocaleDateString('uk-UA', { month: 'long' })); } catch (e) { return false; }
+  })());
+  $('feat').innerHTML = f + '<div class="row"><span class="k">WebP: </span><span id="webp" class="v">…</span></div>';
+  var img = new Image();
+  img.onload = function () { $('webp').className = 'yes'; $('webp').innerHTML = 'ТАК'; };
+  img.onerror = function () { $('webp').className = 'no'; $('webp').innerHTML = 'НІ'; };
+  img.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
+
+  /* ---- keys ---- */
+  var KEY = 'vidaa_diag_keys';
+  var log = [];
+  try {
+    var prev = localStorage.getItem(KEY);
+    if (prev) { $('prevlog').innerHTML = esc(prev).replace(/\|/g, '<br>'); }
+    localStorage.removeItem(KEY);
+  } catch (e) {}
+
+  var lastCode = -1, lastTime = 0, repeat = 0;
+  function onKey(e) {
+    e = e || window.event;
+    var code = e.keyCode || e.which || 0;
+    var now = new Date().getTime();
+    if (code === lastCode && now - lastTime < 1200) { repeat++; } else { repeat = 1; }
+    lastCode = code; lastTime = now;
+
+    var line = 'keyCode=' + code + '  key=' + (e.key || '-') + '  code=' + (e.code || '-');
+    $('lastkey').innerHTML = esc(String(code)) + ' <span style="font-size:1.6vw;color:#fff">' + esc(e.key || '') + '</span>';
+    if (!log.length || log[0].indexOf(line) !== 0) {
+      log.unshift(line);
+    } else {
+      log[0] = line + '  x' + repeat;
+    }
+    if (log.length > 14) { log.length = 14; }
+    $('keylog').innerHTML = esc(log.join('|')).replace(/\|/g, '<br>');
+    try { localStorage.setItem(KEY, log.join('|')); } catch (e2) {}
+
+    if (repeat >= 3) {
+      /* escape hatch: let the key through */
+      if (code === 8 || code === 27 || code === 461 || code === 10009) {
+        try { history.back(); } catch (e3) {}
+      }
+      return true;
+    }
+    if (e.preventDefault) { e.preventDefault(); }
+    return false;
+  }
+  document.addEventListener('keydown', onKey, true);
+})();
+</script>
+</body>
+</html>
